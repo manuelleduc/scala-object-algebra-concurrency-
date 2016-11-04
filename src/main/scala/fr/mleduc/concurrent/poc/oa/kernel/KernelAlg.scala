@@ -3,6 +3,7 @@ package fr.mleduc.concurrent.poc.oa.kernel
 import java.util.UUID
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 import scalax.collection.GraphEdge._
 import scalax.collection.GraphPredef._
 import scalax.collection.mutable.Graph
@@ -31,7 +32,8 @@ trait KernelAlg {
 
   def debug(): Unit
 
-  def execAll(): Unit
+  def execAll()(implicit ex:ExecutionContext): Unit
+
 }
 
 
@@ -92,5 +94,21 @@ trait KernelAlgExec extends KernelAlg {
   override def startOperation(actorId: OperationId): Unit = {
     val pf = operationMap.getOrElse(actorId, PartialFunction.empty)
     pf()
+  }
+
+  override def execAll()(implicit ex:ExecutionContext): Unit = {
+    opGraph.nodes
+      .filter(opGraph.get(_).diSuccessors.isEmpty)
+      .filter(_.value match {
+        case OperationalNode(_, _, Some(_)) => true
+        case _ => false
+      }).foreach((x: opGraph.NodeT) => {
+      x.value match {
+        case OperationalNode(_, partialFunction, Some(value)) => {
+          Future(partialFunction(value))
+          opGraph.remove(x)
+        }
+      }
+    })
   }
 }

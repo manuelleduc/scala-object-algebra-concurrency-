@@ -9,16 +9,15 @@ object Program extends App {
 
     val s = alg.signal()
 
-    val p = alg createProcess ({
+    val p = alg createProcess {
       case _ =>
-        alg.await(s) {
+        (alg await s) {
           case z => println(s"Hello $z")
         }
-    }: PartialFunction[Any, Unit])
+    }
 
     alg.startProcess(p)
 
-    //alg.emit(s, ())
     alg.emit(s, "abc")
 
     alg.debug()

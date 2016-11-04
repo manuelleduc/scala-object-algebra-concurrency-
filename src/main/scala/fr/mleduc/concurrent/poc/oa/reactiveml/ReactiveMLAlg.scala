@@ -1,8 +1,11 @@
 package fr.mleduc.concurrent.poc.oa.reactiveml
 
 import java.util.UUID
+import java.util.concurrent.Executors
 
 import fr.mleduc.concurrent.poc.oa.kernel.KernelAlgExec
+
+import scala.concurrent.ExecutionContext
 
 /**
   * Created by mleduc on 02/11/16.
@@ -36,7 +39,10 @@ trait ReactiveMLAlgExec extends ReactiveMLAlg {
   override type Signal = KernelAlgExec#OperationId
   override type Process = KernelAlgExec#OperationId
 
+  implicit val exec = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
+
   private val kernel: KernelAlgExec = new KernelAlgExec {}
+
 
   override def signal(): Signal = kernel.createBroadcast()
 

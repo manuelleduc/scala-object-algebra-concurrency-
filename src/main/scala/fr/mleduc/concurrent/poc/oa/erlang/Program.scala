@@ -5,8 +5,6 @@ package fr.mleduc.concurrent.poc.oa.erlang
   */
 object Program extends App {
   def program1(alg: ErlangAlgebra) = {
-
-
     val function: PartialFunction[Any, Unit] = {
       case x => println(x)
     }
