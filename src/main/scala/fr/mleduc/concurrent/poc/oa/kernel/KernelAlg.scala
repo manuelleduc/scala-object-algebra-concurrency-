@@ -28,18 +28,18 @@ trait KernelAlg {
 
   def spawnOperation(operation: PartialFunction[Any, Unit]): OperationId
 
-  def startOperation(actorId: OperationId): Unit
+  def startOperation(actorId: OperationId, value: Any = Unit): Unit
 
   def debug(): Unit
 
-  def execAll()(implicit ex:ExecutionContext): Unit
+  def execAll()(implicit ex: ExecutionContext): Unit
 
 }
 
 
 trait KernelAlgExec extends KernelAlg {
 
-  override def debug(): Unit = println(opGraph)
+  override def debug(): Unit = println(opGraph.clone())
 
   override type OperationId = UUID
 
@@ -61,54 +61,68 @@ trait KernelAlgExec extends KernelAlg {
     */
   override def createBroadcast(): OperationId = {
     val id = UUID.randomUUID()
-    opGraph.add(BroadcastNode(id))
+    synchronized {
+      opGraph.add(BroadcastNode(id))
+    }
     id
   }
 
   override def broadcastMessage(actorId: OperationId, content: Any): Unit = {
-    val currentBroadcastNode: BroadcastNode = BroadcastNode(actorId)
-    val predecessors: Set[opGraph.NodeT] = opGraph.get(currentBroadcastNode).diPredecessors
+    synchronized {
+      val currentBroadcastNode: BroadcastNode = BroadcastNode(actorId)
+      opGraph.add(currentBroadcastNode)
+      val predecessors: Set[opGraph.NodeT] = opGraph.get(currentBroadcastNode).diPredecessors
 
-    /* we forward the content to all the registered to the broadcast */
-    predecessors.foreach((x: opGraph.NodeT) => {
-      val value: GraphOperations = x.value match {
-        case OperationalNode(uuid, operation, _) => OperationalNode(uuid, operation, Some(content))
-        case _ => x.value
-      }
-      opGraph.add(value ~> currentBroadcastNode)
-      opGraph.remove(x)
-    })
-    opGraph.remove(currentBroadcastNode)
+      /* we forward the content to all the registered to the broadcast */
+      predecessors.foreach(x => {
+        val value: GraphOperations = x.value match {
+          case OperationalNode(uuid, operation, _) => OperationalNode(uuid, operation, Some(content))
+          case _ => x.value
+        }
+        opGraph.add(value ~> currentBroadcastNode)
+        opGraph.remove(x)
+      })
+      opGraph.remove(currentBroadcastNode)
+    }
   }
 
   override def registerToBroadcast(actorId: OperationId, continuation: PartialFunction[Any, Unit]): Unit =
-    opGraph.add(OperationalNode(UUID.randomUUID(), continuation) ~> BroadcastNode(actorId))
+    synchronized {
+      opGraph.add(OperationalNode(UUID.randomUUID(), continuation) ~> BroadcastNode(actorId))
+    }
 
 
   override def spawnOperation(operation: PartialFunction[Any, Unit]): OperationId = {
     val id: UUID = UUID.randomUUID()
-    operationMap.put(id, operation)
+    synchronized {
+      operationMap.put(id, operation)
+    }
     id
   }
 
-  override def startOperation(actorId: OperationId): Unit = {
-    val pf = operationMap.getOrElse(actorId, PartialFunction.empty)
-    pf()
-  }
+  override def startOperation(actorId: OperationId, value: Any = Unit): Unit =
+    synchronized {
+      operationMap.getOrElse(actorId, PartialFunction.empty)(value)
+    }
 
-  override def execAll()(implicit ex:ExecutionContext): Unit = {
-    opGraph.nodes
-      .filter(opGraph.get(_).diSuccessors.isEmpty)
-      .filter(_.value match {
-        case OperationalNode(_, _, Some(_)) => true
-        case _ => false
-      }).foreach((x: opGraph.NodeT) => {
-      x.value match {
-        case OperationalNode(_, partialFunction, Some(value)) => {
-          Future(partialFunction(value))
-          opGraph.remove(x)
+
+  override def execAll()(implicit ex: ExecutionContext): Unit = {
+    synchronized {
+      opGraph.nodes
+        .filter(opGraph.get(_).diSuccessors.isEmpty)
+        .filter(_.value match {
+          case OperationalNode(_, _, Some(_)) => true
+          case _ => false
+        }).foreach((x: opGraph.NodeT) => {
+        x.value match {
+          case OperationalNode(_, partialFunction, Some(value)) => {
+            Future {
+              partialFunction(value)
+            }
+            opGraph.remove(x)
+          }
         }
-      }
-    })
+      })
+    }
   }
 }

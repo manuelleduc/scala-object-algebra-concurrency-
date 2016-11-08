@@ -5,13 +5,15 @@ import java.util.concurrent.Executors
 
 import fr.mleduc.concurrent.poc.oa.kernel.KernelAlgExec
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by mleduc on 02/11/16.
   */
 trait ReactiveMLAlg {
   def debug()
+
+  def parallel(fct1: PartialFunction[Any, Unit], fct2: PartialFunction[Any, Unit])
 
   type Signal
 
@@ -23,7 +25,7 @@ trait ReactiveMLAlg {
 
   def createProcess(processAction: PartialFunction[Any, Unit]): Process
 
-  def startProcess(process: Process): Unit
+  def startProcess(process: Process, value: Any = Unit): Unit
 
   /**
     * Creating a channel create a "callback" channel.
@@ -33,6 +35,8 @@ trait ReactiveMLAlg {
     * @return the resulting channel
     */
   def emit(channel: Signal, data: Any): Unit
+
+  def forLoop(start: Int, stop: Int, function: (Int) => Unit, until: Option[Signal] = None)
 }
 
 trait ReactiveMLAlgExec extends ReactiveMLAlg {
@@ -50,7 +54,7 @@ trait ReactiveMLAlgExec extends ReactiveMLAlg {
 
   override def createProcess(processAction: PartialFunction[Any, Unit]): UUID = kernel.spawnOperation(processAction)
 
-  override def startProcess(process: Process): Unit = kernel.startOperation(process)
+  override def startProcess(process: Process, value: Any = Unit): Unit = kernel.startOperation(process, value)
 
   /**
     * Creating a channel create a "callback" channel.
@@ -65,4 +69,28 @@ trait ReactiveMLAlgExec extends ReactiveMLAlg {
   }
 
   override def debug(): Unit = kernel.debug()
+
+  override def forLoop(start: Int, stop: Int, function: (Int) => Unit, until: Option[UUID]): Unit = {
+    def loop(itt: Int): Unit = {
+      if (itt <= stop) {
+        val internalChannel = this.signal()
+        val internalProcess = this.createProcess({
+          case _ => this.await(internalChannel) {
+            case x: Int =>
+              function(x)
+              loop(x + 1)
+          }
+        })
+        this.startProcess(internalProcess)
+        this.emit(internalChannel, itt)
+      }
+    }
+
+    loop(start)
+  }
+
+  override def parallel(fct1: PartialFunction[Any, Unit], fct2: PartialFunction[Any, Unit]): Unit = {
+    Future(fct1())
+    Future(fct2())
+  }
 }
