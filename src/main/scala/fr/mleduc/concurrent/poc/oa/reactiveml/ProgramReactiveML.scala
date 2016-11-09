@@ -6,42 +6,48 @@ package fr.mleduc.concurrent.poc.oa.reactiveml
 object ProgramReactiveML extends App {
 
   def program2(alg: ReactiveMLAlg) = {
+
+    import alg._
+
+
     val instantaneousLoop: PartialFunction[Int, Unit] = {
       case x: Int => (1 to x).foreach((z) => println(z * 100))
     }
 
 
-    val kill = alg.signal()
-    val nonInstantaneousLoop = alg.createProcess({
+    val kill = signal()
+    val nonInstantaneousLoop = createProcess({
       case x: Int =>
-        alg.forLoop(1, x, (x: Int) => {
+        forLoop(1, x, (x: Int) => {
           println(x)
         }, Some(kill))
     })
 
 
-    alg.parallel({ case _ => alg.startProcess(nonInstantaneousLoop, 10) }, { case _ => instantaneousLoop(10) })
+    parallel({ case _ => startProcess(nonInstantaneousLoop, 10) }, { case _ => instantaneousLoop(10) })
   }
 
   def program1(alg: ReactiveMLAlg) = {
 
-    val s = alg.signal()
+    import alg._
 
-    val p = alg createProcess {
+    val s = signal()
+
+    val p = createProcess {
       case _ =>
-        (alg await s) {
+        await(s) {
           case z => println(s"Hello $z")
         }
     }
 
-    alg.startProcess(p)
+    startProcess(p)
 
-    alg.emit(s, "abc")
+    emit(s, "abc")
 
-    alg.debug()
+    debug()
   }
 
-  program1(new ReactiveMLAlgExec {})
-  program2(new ReactiveMLAlgExec {})
-  println("end")
+  private val algExec = new ReactiveMLAlgExec {}
+  program1(algExec)
+  program2(algExec)
 }

@@ -7,52 +7,51 @@ object ProgramErlang extends App {
   def fridge2(alg: ErlangAlg) = {
     // example from http://learnyousomeerlang.com/more-on-multiprocessing
 
+    import alg._
+
     sealed trait FridgeMessage
-    final case class Store(actorId: alg.ActorId, food: String) extends FridgeMessage
-    final case class Take(actorId: alg.ActorId, food: String) extends FridgeMessage
+    final case class Store(actorId: ActorId, food: String) extends FridgeMessage
+    final case class Take(actorId: ActorId, food: String) extends FridgeMessage
     final case class Ok(option: Option[String]) extends FridgeMessage
     final case class NotFound() extends FridgeMessage
 
-    lazy val kitchen2: (alg.ActorId) => PartialFunction[Any, Unit] = self => {
+    lazy val kitchen2: (ActorId) => PartialFunction[Any, Unit] = self => {
 
       case foods: List[String] =>
-        alg.receive(self, {
+        receive(self, {
           case Store(actorId, food) =>
-
-            alg.send(actorId, Ok(None))
-            alg.respawn(kitchen2, self, foods + food)
+            send(actorId, Ok(None))
+            respawn(kitchen2, self, foods + food)
           case Take(actorId, food) =>
             if (food.contains(food)) {
-              alg.send(actorId, Some(food))
-              alg.respawn(kitchen2, self, foods.filter(_ != food))
+              send(actorId, Some(food))
+              respawn(kitchen2, self, foods.filter(_ != food))
             } else {
-              alg.send(actorId, NotFound())
+              send(actorId, NotFound())
             }
         })
-
     }
 
-    def store(pid: alg.ActorId, self: alg.ActorId): Unit = {
-      alg.send(pid, Store(self, "Burger"))
-      alg.receive(self, { case x =>
+    def store(pid: ActorId, self: ActorId): Unit = {
+      send(pid, Store(self, "Burger"))
+      receive(self, { case x =>
         println(s"STORE RES $x")
         take(pid, self)
       })
     }
 
-    def take(pid: alg.ActorId, self: alg.ActorId): Unit = {
-      alg.send(pid, Take(self, "Burger"))
-      alg.receive(self, { case x => println(s"TAKE RES $x") })
+    def take(pid: ActorId, self: ActorId): Unit = {
+      send(pid, Take(self, "Burger"))
+      receive(self, { case x => println(s"TAKE RES $x") })
     }
 
-    val main: (alg.ActorId) => (alg.ActorId) => PartialFunction[Any, Unit] = pid => self => {
+    val main: (ActorId) => (ActorId) => PartialFunction[Any, Unit] = pid => self => {
       case _ => store(pid, self)
     }
 
 
-    val pid: alg.ActorId = alg.spawn(kitchen2, List.empty)
-    alg.spawn(main(pid), ())
-    while (true) alg.execAll()
+    val pid: ActorId = spawn(kitchen2, List.empty)
+    spawn(main(pid), ())
   }
 
 
