@@ -3,8 +3,8 @@ package fr.mleduc.concurrent.poc.oa.erlang
 /**
   * Created by mleduc on 02/11/16.
   */
-object Program extends App {
-  def fridge2(alg: ErlangAlgebra) = {
+object ProgramErlang extends App {
+  def fridge2(alg: ErlangAlg) = {
     // example from http://learnyousomeerlang.com/more-on-multiprocessing
 
     sealed trait FridgeMessage
@@ -46,17 +46,15 @@ object Program extends App {
     }
 
     val main: (alg.ActorId) => (alg.ActorId) => PartialFunction[Any, Unit] = pid => self => {
-      case _ =>
-        store(pid, self)
-
+      case _ => store(pid, self)
     }
 
 
     val pid: alg.ActorId = alg.spawn(kitchen2, List.empty)
     alg.spawn(main(pid), ())
-    while(true) alg.execAll()
+    while (true) alg.execAll()
   }
 
 
-  fridge2(new ErlangAlgebraExec {})
+  fridge2(new ErlangAlgExec {})
 }

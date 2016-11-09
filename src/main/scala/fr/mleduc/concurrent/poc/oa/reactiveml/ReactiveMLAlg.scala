@@ -11,13 +11,12 @@ import scala.concurrent.{ExecutionContext, Future}
   * Created by mleduc on 02/11/16.
   */
 trait ReactiveMLAlg {
+  type Signal
+  type Process
+
   def debug()
 
   def parallel(fct1: PartialFunction[Any, Unit], fct2: PartialFunction[Any, Unit])
-
-  type Signal
-
-  type Process
 
   def signal(): Signal
 
@@ -47,27 +46,6 @@ trait ReactiveMLAlgExec extends ReactiveMLAlg {
 
   private val kernel: KernelAlgExec = new KernelAlgExec {}
 
-
-  override def signal(): Signal = kernel.createBroadcast()
-
-  override def await(s: KernelAlgExec#OperationId)(continuation: PartialFunction[Any, Unit]): Unit = kernel.registerToBroadcast(s, continuation)
-
-  override def createProcess(processAction: PartialFunction[Any, Unit]): UUID = kernel.spawnOperation(processAction)
-
-  override def startProcess(process: Process, value: Any = Unit): Unit = kernel.startOperation(process, value)
-
-  /**
-    * Creating a channel create a "callback" channel.
-    *
-    * @param channel input channal
-    * @param data    send data
-    * @return the resulting channel
-    */
-  override def emit(channel: UUID, data: Any): Unit = {
-    kernel.broadcastMessage(channel, data)
-    kernel.execAll()
-  }
-
   override def debug(): Unit = kernel.debug()
 
   override def forLoop(start: Int, stop: Int, function: (Int) => Unit, until: Option[UUID]): Unit = {
@@ -87,6 +65,26 @@ trait ReactiveMLAlgExec extends ReactiveMLAlg {
     }
 
     loop(start)
+  }
+
+  override def signal(): Signal = kernel.createBroadcast()
+
+  override def await(s: KernelAlgExec#OperationId)(continuation: PartialFunction[Any, Unit]): Unit = kernel.registerToBroadcast(s, continuation)
+
+  override def createProcess(processAction: PartialFunction[Any, Unit]): UUID = kernel.spawnOperation(processAction)
+
+  override def startProcess(process: Process, value: Any = Unit): Unit = kernel.startOperation(process, value)
+
+  /**
+    * Creating a channel create a "callback" channel.
+    *
+    * @param channel input channal
+    * @param data    send data
+    * @return the resulting channel
+    */
+  override def emit(channel: UUID, data: Any): Unit = {
+    kernel.broadcastMessage(channel, data)
+    kernel.execAll()
   }
 
   override def parallel(fct1: PartialFunction[Any, Unit], fct2: PartialFunction[Any, Unit]): Unit = {

@@ -3,7 +3,7 @@ package fr.mleduc.concurrent.poc.oa.reactiveml
 /**
   * Created by mleduc on 02/11/16.
   */
-object Program extends App {
+object ProgramReactiveML extends App {
 
   def program2(alg: ReactiveMLAlg) = {
     val instantaneousLoop: PartialFunction[Int, Unit] = {

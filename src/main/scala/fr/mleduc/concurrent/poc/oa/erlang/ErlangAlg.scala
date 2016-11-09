@@ -5,20 +5,19 @@ import java.util.concurrent.Executors
 
 import fr.mleduc.concurrent.poc.oa.kernel.KernelAlgExec
 
-import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
 /**
   * Created by mleduc on 02/11/16.
   */
-trait ErlangAlgebra {
+trait ErlangAlg {
+  type ActorId
+
   def execAll()
 
   def respawn(actor: ActorId => PartialFunction[Any, Unit], pid: ActorId, constructor: Any): Unit
 
   def debug()
-
-  type ActorId
 
   def send(actor1: ActorId, data: Any)
 
@@ -29,55 +28,32 @@ trait ErlangAlgebra {
 }
 
 
-trait ErlangAlgebraExec extends ErlangAlgebra {
+trait ErlangAlgExec extends ErlangAlg {
   override type ActorId = UUID
-
+  implicit val exec = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
   private val kernel = new KernelAlgExec {}
 
-  private val actorToOperation: mutable.Map[UUID, UUID] = scala.collection.mutable.Map.empty
-
-  implicit val exec = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
-
-
   override def send(actor: UUID, data: Any): Unit = {
-    //println(s"send $data to $actor")
-
-    val maybeUuid: Option[UUID] = actorToOperation.get(actor)
-    maybeUuid.foreach(broadcast => {
-      kernel.broadcastMessage(broadcast, data)
-    })
+    kernel.broadcastMessage(actor, data)
     kernel.execAll()
-
   }
 
   override def spawn(actor: ActorId => PartialFunction[Any, Unit], constructor: Any): UUID = {
-    val actorId = UUID.randomUUID()
-
-    val actor1: PartialFunction[Any, Unit] = actor(actorId)
-    val opp: UUID = kernel.spawnOperation(actor1)
-    kernel.startOperation(opp, constructor)
-    actorId
+    val id = kernel.createPersistentBroadcast()
+    val initilizedActor = actor(id)
+    kernel.startOperation(kernel.spawnOperation(initilizedActor), constructor)
+    id
 
   }
 
 
   override def respawn(actor: (UUID) => PartialFunction[Any, Unit], pid: UUID, constructor: Any): Unit = {
-
     val actor1: PartialFunction[Any, Unit] = actor(pid)
-    val opp: UUID = kernel.spawnOperation(actor1)
-    kernel.startOperation(opp, constructor)
-
-
+    kernel.startOperation(kernel.spawnOperation(actor1), constructor)
   }
 
   override def receive(self: UUID, continuation: PartialFunction[Any, Unit]): Unit = {
-
-
-    val broadcast = kernel.createPersistentBroadcast()
-    //println(s"broadcast uuid = $broadcast")
-    kernel.registerToBroadcast(broadcast, continuation)
-    actorToOperation.put(self, broadcast)
-
+    kernel.registerToBroadcast(self, continuation)
   }
 
   override def debug(): Unit = kernel.debug()

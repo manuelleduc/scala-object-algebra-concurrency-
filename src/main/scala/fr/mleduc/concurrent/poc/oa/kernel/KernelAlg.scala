@@ -41,23 +41,11 @@ trait KernelAlg {
 
 trait KernelAlgExec extends KernelAlg {
 
-  override def debug(): Unit = println(opGraph.clone())
-
   override type OperationId = UUID
-
-  sealed trait GraphOperations {
-    val uuid: OperationId
-  }
-
-  final case class OperationalNode(uuid: OperationId, operation: PartialFunction[Any, Unit], message: Option[Any] = None) extends GraphOperations
-
-  final case class BroadcastNode(uuid: OperationId) extends GraphOperations
-
-  final case class PersistentBroadcastNode(uuid: OperationId, messages: mutable.Queue[Any] = mutable.Queue.empty) extends GraphOperations
-
   private val operationMap: mutable.Map[OperationId, PartialFunction[Any, Unit]] = mutable.Map.empty
-
   private val opGraph = Graph[GraphOperations, DiEdge]()
+
+  override def debug(): Unit = println(opGraph.clone())
 
   /**
     * This type of actor broadcast a message to everybody subscribed to it.
@@ -73,7 +61,6 @@ trait KernelAlgExec extends KernelAlg {
     id
   }
 
-
   override def createPersistentBroadcast(): UUID = {
     val id = UUID.randomUUID()
     synchronized {
@@ -81,7 +68,6 @@ trait KernelAlgExec extends KernelAlg {
     }
     id
   }
-
 
   override def broadcastMessage(actorId: OperationId, content: Any): Unit = {
     synchronized {
@@ -139,7 +125,6 @@ trait KernelAlgExec extends KernelAlg {
 
     }
 
-
   override def spawnOperation(operation: PartialFunction[Any, Unit]): OperationId = {
     val id: UUID = UUID.randomUUID()
     synchronized {
@@ -153,11 +138,10 @@ trait KernelAlgExec extends KernelAlg {
       operationMap.getOrElse(actorId, PartialFunction.empty)(value)
     }
 
-
   override def execAll()(implicit ex: ExecutionContext): Unit = {
     synchronized {
       opGraph.nodes
-        .filter(opGraph.get(_).diSuccessors.isEmpty)
+        .filter(_.diSuccessors.isEmpty)
         .filter(t => t.value match {
           case OperationalNode(_, _, Some(_)) => true
           case PersistentBroadcastNode(_, queue) => queue.nonEmpty && t.diPredecessors.nonEmpty
@@ -165,10 +149,10 @@ trait KernelAlgExec extends KernelAlg {
         }).foreach((x: opGraph.NodeT) => {
         x.value match {
           case OperationalNode(_, partialFunction, Some(value)) =>
+            opGraph.remove(x)
             Future {
               partialFunction(value)
             }
-            opGraph.remove(x)
           case PersistentBroadcastNode(_, queue) =>
             val value = queue.dequeue()
 
@@ -176,8 +160,8 @@ trait KernelAlgExec extends KernelAlg {
             predecessors.foreach(tmp => {
               tmp.value match {
                 case OperationalNode(_, partialFunction, _) =>
-                  Future(partialFunction(value))
                   opGraph.remove(tmp)
+                  Future(partialFunction(value))
               }
             })
 
@@ -185,4 +169,14 @@ trait KernelAlgExec extends KernelAlg {
       })
     }
   }
+
+  sealed trait GraphOperations {
+    val uuid: OperationId
+  }
+
+  final case class OperationalNode(uuid: OperationId, operation: PartialFunction[Any, Unit], message: Option[Any] = None) extends GraphOperations
+
+  final case class BroadcastNode(uuid: OperationId) extends GraphOperations
+
+  final case class PersistentBroadcastNode(uuid: OperationId, messages: mutable.Queue[Any] = mutable.Queue.empty) extends GraphOperations
 }
